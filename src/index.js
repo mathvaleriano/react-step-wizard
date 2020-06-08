@@ -16,6 +16,9 @@ export default class StepWizard extends PureComponent {
         if (this.props.isHashEnabled) {
             window.addEventListener('hashchange', this.onHashChange);
         }
+
+        // Provide instance to parent
+        this.props.instance(this);
     }
 
     componentWillUnmount() {
@@ -36,7 +39,7 @@ export default class StepWizard extends PureComponent {
         // Set initial classes
         // Get hash only in client side
         const hash = typeof window === 'object' ? this.getHash() : '';
-        const children = React.Children.toArray(this.props.children);
+        const children = React.Children.toArray(this.getSteps());
         children.forEach((child, i) => {
             // Create hashKey map
             state.hashKeys[i] = (child.props && child.props.hashKey) || `step${i + 1}`;
@@ -79,7 +82,7 @@ export default class StepWizard extends PureComponent {
         if (next !== undefined) this.setActiveStep(next);
     }
 
-    isInvalidStep = next => (next < 0 || next >= this.props.children.length)
+    isInvalidStep = next => (next < 0 || next >= this.totalSteps)
 
     setActiveStep = (next) => {
         const active = this.state.activeStep;
@@ -124,11 +127,22 @@ export default class StepWizard extends PureComponent {
         if (this.props.isHashEnabled) this.updateHash(this.state.activeStep);
     }
 
+    /** Getters */
+    get currentStep() {
+        return this.state.activeStep + 1;
+    }
+
+    get totalSteps() {
+        return this.getSteps().length;
+    }
+
+    getSteps = () => this.props.children.filter(el => el);
+
     /** Go to first step */
     firstStep = () => this.goToStep(1)
 
     /** Go to last step */
-    lastStep = () => this.goToStep(this.props.children.length)
+    lastStep = () => this.goToStep(this.totalSteps)
 
     /** Next Step */
     nextStep = () => this.setActiveStep(this.state.activeStep + 1)
@@ -144,13 +158,15 @@ export default class StepWizard extends PureComponent {
     }
 
     // Allows for using HTML elements as a step
-    isReactComponent = child => typeof child === 'function' || typeof child.type === 'function'
+    isReactComponent = ({ type }) => (
+        typeof type === 'function' || typeof type === 'object'
+    )
 
     /** Render */
     render() {
         const props = {
-            currentStep: this.state.activeStep + 1,
-            totalSteps: this.props.children.length,
+            currentStep: this.currentStep,
+            totalSteps: this.totalSteps,
             /** Functions */
             nextStep: this.nextStep,
             previousStep: this.previousStep,
@@ -160,7 +176,9 @@ export default class StepWizard extends PureComponent {
         };
 
         const { classes } = this.state;
-        const childrenWithProps = React.Children.map(this.props.children, (child, i) => {
+        const childrenWithProps = React.Children.map(this.getSteps(), (child, i) => {
+            if (!child) return null;
+
             props.isActive = (i === this.state.activeStep);
             props.transitions = classes[i];
 
@@ -168,7 +186,7 @@ export default class StepWizard extends PureComponent {
             if (!this.props.isLazyMount || (this.props.isLazyMount && props.isActive)) {
                 return (
                     <Step {...props}>{
-                        this.isReactComponent(child.type)
+                        this.isReactComponent(child)
                             ? React.cloneElement(child, props)
                             : child
                     }</Step>
@@ -179,7 +197,7 @@ export default class StepWizard extends PureComponent {
         });
 
         return (
-            <div>
+            <div className={this.props.className}>
                 {this.props.nav && React.cloneElement(this.props.nav, props)}
                 <div className={styles['step-wrapper']}>
                     {childrenWithProps}
@@ -191,7 +209,9 @@ export default class StepWizard extends PureComponent {
 
 StepWizard.propTypes = {
     children: PropTypes.node,
+    className: PropTypes.string,
     initialStep: PropTypes.number,
+    instance: PropTypes.func,
     isHashEnabled: PropTypes.bool,
     isLazyMount: PropTypes.bool,
     nav: PropTypes.node,
@@ -201,7 +221,9 @@ StepWizard.propTypes = {
 
 StepWizard.defaultProps = {
     children: [],
+    className: null,
     initialStep: 1,
+    instance: () => {},
     isHashEnabled: false,
     isLazyMount: false,
     nav: null,
@@ -209,7 +231,11 @@ StepWizard.defaultProps = {
     transitions: undefined,
 };
 
-export const Step = ({ children, isActive, transitions }) => (
+export const Step = ({
+    children,
+    isActive,
+    transitions,
+}) => (
     <div className={`${styles.step} ${transitions} ${isActive ? styles.active : ''}`.trim()}>
         { children }
     </div>
